@@ -1,67 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>플랫포머 어드벤처</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333; /* 어두운 배경색 */
+            color: white;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #fff; /* 캔버스 테두리 */
+            background-color: #555; /* 캔버스 배경색 */
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+        #controlsInfo {
+            margin-top: 15px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+        #controlsInfo p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="controlsInfo">
+            <p><strong>조작법:</strong></p>
+            <p>이동: ← → (화살표 키)</p>
+            <p>점프: 스페이스바</p>
+            <p>공격: 'A' 키</p>
+            <p>재시작 (게임 오버 시): 'R' 키</p>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
+```javascript
+// game.js
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// 캔버스 크기 설정 (필요에 따라 조절)
+// 캔버스 크기 설정
 canvas.width = 800;
 canvas.height = 500;
+console.log("캔버스 초기화 완료:", canvas.width, "x", canvas.height);
 
-// 게임 요소 설정
+// --- 게임 요소 객체 및 배열 ---
+
+// 플레이어 설정
 const player = {
     x: 100,
-    y: canvas.height - 50, // 초기 위치 (바닥에 있도록)
+    y: canvas.height - 70, // 초기 y 위치 (바닥 플랫폼 위에서 시작하도록)
     width: 30,
     height: 50,
-    color: 'blue',
-    speed: 5,
+    color: '#4A90E2',
+    speed: 4,
     dx: 0,
-    dy: 0, // 수직 속도
-    jumpStrength: 12,
-    gravity: 0.5,
+    dy: 0,
+    jumpStrength: 11,
+    gravity: 0.45,
     isGrounded: false,
-    facingDirection: 'right', // 'left' 또는 'right'
-    isAttacking: false, // 현재는 발사체에만 사용, 추후 플레이어 애니메이션 등에 활용 가능
-    attackCooldown: 500, // 공격 쿨다운 (밀리초)
-    lastAttackTime: 0
+    facingDirection: 'right',
+    attackCooldown: 400,
+    lastAttackTime: 0,
+    health: 3,
+    maxHealth: 3,
+    isInvincible: false,
+    invincibilityDuration: 1500,
+    lastHitTime: 0
 };
+console.log("플레이어 객체 초기화:", JSON.parse(JSON.stringify(player))); // 객체 복사해서 출력
 
+// 발사체 설정
 const projectiles = [];
-const projectileRadius = 5;
-const projectileSpeed = 7;
-const projectileColor = 'red';
+const projectileRadius = 6;
+const projectileSpeed = 8;
+const projectileColor = '#F5A623';
 
+// 플랫폼 설정
 const platforms = [
-    { x: 0, y: canvas.height - 20, width: canvas.width, height: 20, color: 'green' }, // 바닥
-    { x: 150, y: canvas.height - 100, width: 200, height: 20, color: 'saddlebrown' },
-    { x: 400, y: canvas.height - 180, width: 150, height: 20, color: 'saddlebrown' },
-    { x: 50, y: canvas.height - 280, width: 100, height: 20, color: 'saddlebrown' }
+    { x: 0, y: canvas.height - 40, width: canvas.width, height: 40, color: '#6B8E23' },
+    { x: 150, y: canvas.height - 120, width: 180, height: 20, color: '#8B4513' },
+    { x: 400, y: canvas.height - 200, width: 150, height: 20, color: '#8B4513' },
+    { x: 50, y: canvas.height - 300, width: 120, height: 20, color: '#8B4513' },
+    { x: 600, y: canvas.height - 350, width: 100, height: 20, color: '#8B4513' }
 ];
+console.log("플랫폼 개수:", platforms.length);
 
+// 적 설정
 const enemies = [
-    { x: 200, y: platforms[1].y - 30, width: 30, height: 30, color: 'purple', alive: true, speed: 0.5, direction: 1, originalX: 200, patrolRange: 50 },
-    { x: 450, y: platforms[2].y - 30, width: 30, height: 30, color: 'purple', alive: true, speed: 0, direction: 1, originalX: 450, patrolRange: 0 }, // 정지된 적
-    { x: 600, y: platforms[0].y - 30, width: 30, height: 30, color: 'purple', alive: true, speed: 0.8, direction: -1, originalX: 600, patrolRange: 70 }
+    { x: 200, y: platforms[1].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 0.7, direction: 1, originalX: 200, patrolRange: 60 },
+    { x: 450, y: platforms[2].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 0, direction: 1, originalX: 450, patrolRange: 0 },
+    { x: 650, y: platforms[0].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 1, direction: -1, originalX: 650, patrolRange: 80 }
 ];
+let score = 0;
 
-// 키 입력 상태
 const keys = {
     ArrowLeft: false,
     ArrowRight: false,
     Space: false,
-    KeyA: false // 'a' 키
+    KeyA: false
 };
 
 // --- 그리기 함수들 ---
+
 function drawPlayer() {
+    // console.log(`플레이어 그리기 시도: x=${player.x}, y=${player.y}, health=${player.health}, invincible=${player.isInvincible}`); // 너무 자주 호출되므로 필요시 주석 해제
+    if (player.isInvincible && Math.floor((Date.now() - player.lastHitTime) / 100) % 2 === 0) {
+        // console.log("플레이어 무적 상태 깜빡임 - 이번 프레임은 그리지 않음");
+        return; // 무적 깜빡임 효과
+    }
     ctx.fillStyle = player.color;
     ctx.fillRect(player.x, player.y, player.width, player.height);
 
-    // 간단한 시선 표현 (옵션)
     ctx.fillStyle = 'white';
-    if (player.facingDirection === 'right') {
-        ctx.fillRect(player.x + player.width * 0.7, player.y + player.height * 0.2, 5, 5);
-    } else {
-        ctx.fillRect(player.x + player.width * 0.1, player.y + player.height * 0.2, 5, 5);
-    }
+    const eyeXOffset = player.facingDirection === 'right' ? player.width * 0.65 : player.width * 0.15;
+    ctx.fillRect(player.x + eyeXOffset, player.y + player.height * 0.2, 6, 6);
 }
 
 function drawPlatforms() {
@@ -90,14 +159,42 @@ function drawEnemies() {
     });
 }
 
-// 화면 지우기
-function clearCanvas() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function drawUI() {
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`점수: ${score}`, 20, 30);
+
+    ctx.textAlign = 'right';
+    let healthDisplay = "체력: ";
+    for(let i=0; i < player.maxHealth; i++) {
+        healthDisplay += (i < player.health) ? "❤️" : "🖤";
+    }
+    ctx.fillText(healthDisplay, canvas.width - 20, 30);
+
+    if (player.health <= 0) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '40px Arial';
+        ctx.fillStyle = 'red';
+        ctx.textAlign = 'center';
+        ctx.fillText('게임 오버', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = '20px Arial';
+        ctx.fillStyle = 'white';
+        ctx.fillText('다시 시작하려면 R 키를 누르세요', canvas.width / 2, canvas.height / 2 + 20);
+    }
 }
 
-// --- 업데이트 함수들 ---
+function clearCanvas() {
+    ctx.fillStyle = '#555';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// --- 업데이트 함수들 (게임 로직) ---
+
 function updatePlayer() {
-    // 좌우 이동
+    if (player.health <= 0 && !gameRunning) return; // 게임 오버 상태면 업데이트 안함 (gameRunning으로 이미 제어)
+
     if (keys.ArrowLeft) {
         player.x -= player.speed;
         player.facingDirection = 'left';
@@ -107,61 +204,55 @@ function updatePlayer() {
         player.facingDirection = 'right';
     }
 
-    // 점프
     if (keys.Space && player.isGrounded) {
         player.dy = -player.jumpStrength;
         player.isGrounded = false;
     }
 
-    // 중력 적용
     player.dy += player.gravity;
     player.y += player.dy;
-    player.isGrounded = false; // 일단 false로 두고 플랫폼 충돌 시 true로 변경
+    player.isGrounded = false;
 
-    // 플랫폼과의 충돌 처리
     platforms.forEach(platform => {
-        // 플레이어가 플랫폼 위에서 아래로 떨어지는 경우 + 발이 플랫폼 상단에 닿았을 때
         if (player.x < platform.x + platform.width &&
             player.x + player.width > platform.x &&
-            player.y + player.height >= platform.y && // 이전 y 위치는 플랫폼 위였고
-            player.y + player.height - player.dy <= platform.y + 1 && // 현재 y 위치는 플랫폼 안이나 아래로 내려옴
-            player.dy >= 0) { // 아래로 떨어지는 중일 때만
+            player.y + player.height >= platform.y &&
+            player.y + player.height - player.dy <= platform.y + 1 && // 이전 y 위치는 플랫폼 위였고
+            player.dy >= 0) {
             player.y = platform.y - player.height;
             player.dy = 0;
             player.isGrounded = true;
         }
-        // 머리가 플랫폼 바닥에 닿는 경우 (선택적)
         if (player.x < platform.x + platform.width &&
             player.x + player.width > platform.x &&
-            player.y < platform.y + platform.height &&
-            player.y + player.height > platform.y + platform.height && // 머리가 플랫폼 바닥보다 위에 있었고
-            player.dy < 0) { // 위로 점프 중일 때
+            player.y <= platform.y + platform.height &&
+            player.y - player.dy >= platform.y + platform.height -1 &&
+            player.dy < 0) {
             player.y = platform.y + platform.height;
-            player.dy = 0; // 위로 가는 속도 0
+            player.dy = 0.1;
         }
     });
 
+    if (player.x < 0) player.x = 0;
+    if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
 
-    // 캔버스 경계 처리 (좌우)
-    if (player.x < 0) {
-        player.x = 0;
-    }
-    if (player.x + player.width > canvas.width) {
-        player.x = canvas.width - player.width;
-    }
-    // 캔버스 바닥 경계 (플랫폼이 없을 경우 대비)
     if (player.y + player.height > canvas.height && !player.isGrounded) {
-        player.y = canvas.height - player.height;
-        player.dy = 0;
-        player.isGrounded = true;
+        player.health -=1;
+        console.log("플레이어 추락! 현재 체력:", player.health);
+        if(player.health > 0) {
+            player.x = 100;
+            player.y = canvas.height - 70;
+            player.dy = 0;
+            player.isGrounded = true; // 추락 후에는 땅에 있도록 설정
+            player.isInvincible = true;
+            player.lastHitTime = Date.now();
+        }
     }
 
-
-    // 공격 (발사체)
     const now = Date.now();
     if (keys.KeyA && (now - player.lastAttackTime > player.attackCooldown)) {
         const projectile = {
-            x: player.facingDirection === 'right' ? player.x + player.width : player.x,
+            x: player.facingDirection === 'right' ? player.x + player.width + projectileRadius : player.x - projectileRadius,
             y: player.y + player.height / 2,
             radius: projectileRadius,
             color: projectileColor,
@@ -170,14 +261,17 @@ function updatePlayer() {
         projectiles.push(projectile);
         player.lastAttackTime = now;
     }
+
+    if (player.isInvincible && (Date.now() - player.lastHitTime > player.invincibilityDuration)) {
+        player.isInvincible = false;
+        // console.log("플레이어 무적 상태 해제");
+    }
 }
 
 function updateProjectiles() {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         p.x += p.dx;
-
-        // 화면 밖으로 나간 발사체 제거
         if (p.x - p.radius > canvas.width || p.x + p.radius < 0) {
             projectiles.splice(i, 1);
         }
@@ -185,24 +279,23 @@ function updateProjectiles() {
 }
 
 function updateEnemies() {
+    // if (player.health <= 0 && !gameRunning) return; // 게임 오버 시 적 업데이트 중단 (gameRunning으로 제어)
+
     enemies.forEach(enemy => {
-        if (enemy.alive && enemy.speed > 0) { // 움직이는 적인 경우
+        if (enemy.alive && enemy.speed > 0) {
             enemy.x += enemy.speed * enemy.direction;
-            // 순찰 범위 제한
-            if (enemy.x < enemy.originalX - enemy.patrolRange || enemy.x + enemy.width > enemy.originalX + enemy.patrolRange + enemy.width /2) {
-                 enemy.direction *= -1; // 방향 전환
-                 // 범위를 벗어나지 않도록 위치 보정
+            if (enemy.x < enemy.originalX - enemy.patrolRange || enemy.x + enemy.width > enemy.originalX + enemy.patrolRange + enemy.width) {
+                 enemy.direction *= -1;
                  if(enemy.x < enemy.originalX - enemy.patrolRange) enemy.x = enemy.originalX - enemy.patrolRange;
-                 if(enemy.x + enemy.width > enemy.originalX + enemy.patrolRange + enemy.width /2) enemy.x = enemy.originalX + enemy.patrolRange - enemy.width/2;
+                 if(enemy.x + enemy.width > enemy.originalX + enemy.patrolRange + enemy.width) enemy.x = enemy.originalX + enemy.patrolRange;
             }
         }
     });
 }
 
-
-// --- 충돌 감지 함수 ---
 function checkCollisions() {
-    // 발사체 vs 적
+    // if (player.health <= 0 && !gameRunning) return; // 게임 오버 시 충돌 감지 중단 (gameRunning으로 제어)
+
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         for (let j = enemies.length - 1; j >= 0; j--) {
@@ -212,45 +305,91 @@ function checkCollisions() {
                 p.x + p.radius > enemy.x &&
                 p.y - p.radius < enemy.y + enemy.height &&
                 p.y + p.radius > enemy.y) {
-                enemy.alive = false; // 적 제거 (또는 체력 감소 등)
-                projectiles.splice(i, 1); // 발사체 제거
-                break; // 다음 발사체로 넘어감
+                enemy.alive = false;
+                projectiles.splice(i, 1);
+                score += 10;
+                console.log("적 명중! 현재 점수:", score);
+                break;
             }
         }
     }
 
-    // 플레이어 vs 적
-    enemies.forEach(enemy => {
-        if (enemy.alive &&
-            player.x < enemy.x + enemy.width &&
-            player.x + player.width > enemy.x &&
-            player.y < enemy.y + enemy.height &&
-            player.y + player.height > enemy.y) {
-            // 플레이어가 적과 충돌했을 때의 로직 (예: 게임 오버, 체력 감소 등)
-            console.log("플레이어와 적 충돌!");
-            // 간단한 예시: 플레이어를 시작 위치로
-            player.x = 100;
-            player.y = canvas.height - 50;
-            player.dy = 0;
-        }
-    });
+    if (!player.isInvincible) {
+        enemies.forEach(enemy => {
+            if (enemy.alive &&
+                player.x < enemy.x + enemy.width &&
+                player.x + player.width > enemy.x &&
+                player.y < enemy.y + enemy.height &&
+                player.y + player.height > enemy.y) {
+                player.health--;
+                player.isInvincible = true;
+                player.lastHitTime = Date.now();
+                console.log("플레이어 피격! 현재 체력:", player.health, "무적 상태 시작");
+
+                if (player.health > 0) {
+                     player.x = 100;
+                     player.y = canvas.height - 70;
+                     player.dy = 0;
+                     player.isGrounded = true; // 피격 후 땅에 있도록 설정
+                } else {
+                    console.log("플레이어 체력 0. 게임 오버.");
+                }
+            }
+        });
+    }
 }
 
+function resetGame() {
+    console.log("게임 리셋 시작");
+    player.x = 100;
+    player.y = canvas.height - 70;
+    player.dx = 0;
+    player.dy = 0;
+    player.health = player.maxHealth;
+    player.isGrounded = false; // 시작 시 공중에 약간 떠있다가 떨어지도록
+    player.isInvincible = false;
+    player.facingDirection = 'right';
+    player.lastAttackTime = 0;
+    player.lastHitTime = 0;
 
-// --- 게임 루프 ---
+    projectiles.length = 0;
+
+    enemies.forEach(enemy => {
+        enemy.alive = true;
+        enemy.x = enemy.originalX;
+    });
+    // 적 y 위치 재설정
+    enemies[0].y = platforms[1].y - enemies[0].height;
+    enemies[1].y = platforms[2].y - enemies[1].height;
+    enemies[2].y = platforms[0].y - enemies[2].height;
+
+    score = 0;
+    gameRunning = true;
+    console.log("게임 리셋 완료. gameRunning:", gameRunning);
+}
+
+let gameRunning = true;
 function gameLoop() {
     clearCanvas();
 
-    updatePlayer();
-    updateProjectiles();
-    updateEnemies();
+    if (gameRunning) {
+        updatePlayer();
+        updateProjectiles();
+        updateEnemies();
+        checkCollisions();
 
-    checkCollisions();
+        if (player.health <= 0) {
+            gameRunning = false; // 게임 로직 업데이트 중단
+            console.log("게임 루프 내에서 게임 오버 감지. gameRunning:", gameRunning);
+        }
+    }
 
+    // 그리기 함수들은 게임 실행 여부와 관계없이 호출 (게임오버 화면 등)
     drawPlatforms();
     drawEnemies();
     drawProjectiles();
-    drawPlayer();
+    drawPlayer(); // 플레이어는 항상 그림 (게임 오버 시에도 마지막 모습)
+    drawUI();     // UI도 항상 그림 (점수, 체력, 게임오버 메시지)
 
     requestAnimationFrame(gameLoop);
 }
@@ -260,7 +399,11 @@ function handleKeyDown(e) {
     if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
     if (e.code === 'ArrowRight') keys.ArrowRight = true;
     if (e.code === 'Space') keys.Space = true;
-    if (e.code === 'KeyA') keys.KeyA = true; // 'a' 키 (소문자 a)
+    if (e.code === 'KeyA') keys.KeyA = true;
+
+    if (!gameRunning && e.code === 'KeyR' && player.health <= 0) {
+        resetGame();
+    }
 }
 
 function handleKeyUp(e) {
@@ -271,7 +414,15 @@ function handleKeyUp(e) {
 }
 
 document.addEventListener('keydown', handleKeyDown);
-document.addEventListener('keyup', handleKeyUp);
+document.addEventListener('keyup', keyUp); // 오타 수정: keyUp -> handleKeyUp
 
 // --- 게임 시작 ---
+// 적 y 위치 초기화 (platforms 배열이 정의된 후에)
+enemies[0].y = platforms[1].y - enemies[0].height;
+enemies[1].y = platforms[2].y - enemies[1].height;
+enemies[2].y = platforms[0].y - enemies[2].height;
+console.log("초기 적 y 위치 설정 완료");
+
+console.log("게임 루프 시작 직전");
 gameLoop();
+console.log("첫 게임 루프 호출됨");
