@@ -52,20 +52,38 @@
 ```javascript
 // game.js
 
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+console.log("game.js 스크립트 시작됨"); // 스크립트 파일 실행 여부 확인용 최상단 로그
 
-// 캔버스 크기 설정
-canvas.width = 800;
-canvas.height = 500;
-console.log("캔버스 초기화 완료:", canvas.width, "x", canvas.height);
+const canvas = document.getElementById('gameCanvas');
+// canvas 요소가 제대로 로드되었는지 확인
+if (!canvas) {
+    console.error("캔버스 요소를 찾을 수 없습니다! HTML에 'gameCanvas' ID를 가진 canvas 태그가 있는지, 스크립트가 DOM 로드 후 실행되는지 확인하세요.");
+} else {
+    console.log("캔버스 요소 가져오기 성공:", canvas);
+}
+
+const ctx = canvas ? canvas.getContext('2d') : null;
+if (!ctx) {
+    console.error("2D 컨텍스트를 가져올 수 없습니다! canvas 요소가 유효한지 확인하세요.");
+} else {
+    console.log("2D 컨텍스트 가져오기 성공");
+}
+
+
+// 캔버스 크기 설정 (ctx가 유효할 때만 실행)
+if (ctx) {
+    canvas.width = 800;
+    canvas.height = 500;
+    console.log("캔버스 크기 설정 완료:", canvas.width, "x", canvas.height);
+}
+
 
 // --- 게임 요소 객체 및 배열 ---
 
 // 플레이어 설정
 const player = {
     x: 100,
-    y: canvas.height - 70, // 초기 y 위치 (바닥 플랫폼 위에서 시작하도록)
+    y: ctx ? canvas.height - 70 : 430, // ctx가 없을 경우 기본값 사용 (오류 방지용)
     width: 30,
     height: 50,
     color: '#4A90E2',
@@ -84,7 +102,8 @@ const player = {
     invincibilityDuration: 1500,
     lastHitTime: 0
 };
-console.log("플레이어 객체 초기화:", JSON.parse(JSON.stringify(player))); // 객체 복사해서 출력
+// 플레이어 객체가 올바르게 생성되었는지 확인하기 위해 JSON.stringify와 JSON.parse를 사용 (객체 내부 값까지 확인)
+console.log("플레이어 객체 초기화 시도 직후:", JSON.parse(JSON.stringify(player)));
 
 // 발사체 설정
 const projectiles = [];
@@ -94,19 +113,17 @@ const projectileColor = '#F5A623';
 
 // 플랫폼 설정
 const platforms = [
-    { x: 0, y: canvas.height - 40, width: canvas.width, height: 40, color: '#6B8E23' },
-    { x: 150, y: canvas.height - 120, width: 180, height: 20, color: '#8B4513' },
-    { x: 400, y: canvas.height - 200, width: 150, height: 20, color: '#8B4513' },
-    { x: 50, y: canvas.height - 300, width: 120, height: 20, color: '#8B4513' },
-    { x: 600, y: canvas.height - 350, width: 100, height: 20, color: '#8B4513' }
+    { x: 0, y: ctx ? canvas.height - 40 : 460, width: ctx ? canvas.width : 800, height: 40, color: '#6B8E23' },
+    { x: 150, y: ctx ? canvas.height - 120 : 380, width: 180, height: 20, color: '#8B4513' },
+    { x: 400, y: ctx ? canvas.height - 200 : 300, width: 150, height: 20, color: '#8B4513' },
+    { x: 50, y: ctx ? canvas.height - 300 : 200, width: 120, height: 20, color: '#8B4513' },
+    { x: 600, y: ctx ? canvas.height - 350 : 150, width: 100, height: 20, color: '#8B4513' }
 ];
-console.log("플랫폼 개수:", platforms.length);
+console.log("플랫폼 개수:", platforms.length, "첫 플랫폼 y:", platforms[0].y);
 
 // 적 설정
 const enemies = [
-    { x: 200, y: platforms[1].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 0.7, direction: 1, originalX: 200, patrolRange: 60 },
-    { x: 450, y: platforms[2].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 0, direction: 1, originalX: 450, patrolRange: 0 },
-    { x: 650, y: platforms[0].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 1, direction: -1, originalX: 650, patrolRange: 80 }
+    // 적 y 위치는 플랫폼 기준으로 설정되므로, platforms 배열 초기화 이후에 y값 할당
 ];
 let score = 0;
 
@@ -117,13 +134,12 @@ const keys = {
     KeyA: false
 };
 
-// --- 그리기 함수들 ---
+// --- 그리기 함수들 --- (ctx가 유효할 때만 의미 있음)
 
 function drawPlayer() {
-    // console.log(`플레이어 그리기 시도: x=${player.x}, y=${player.y}, health=${player.health}, invincible=${player.isInvincible}`); // 너무 자주 호출되므로 필요시 주석 해제
+    if (!ctx) return;
     if (player.isInvincible && Math.floor((Date.now() - player.lastHitTime) / 100) % 2 === 0) {
-        // console.log("플레이어 무적 상태 깜빡임 - 이번 프레임은 그리지 않음");
-        return; // 무적 깜빡임 효과
+        return;
     }
     ctx.fillStyle = player.color;
     ctx.fillRect(player.x, player.y, player.width, player.height);
@@ -134,6 +150,7 @@ function drawPlayer() {
 }
 
 function drawPlatforms() {
+    if (!ctx) return;
     platforms.forEach(platform => {
         ctx.fillStyle = platform.color;
         ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
@@ -141,6 +158,7 @@ function drawPlatforms() {
 }
 
 function drawProjectiles() {
+    if (!ctx) return;
     projectiles.forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
@@ -151,6 +169,7 @@ function drawProjectiles() {
 }
 
 function drawEnemies() {
+    if (!ctx) return;
     enemies.forEach(enemy => {
         if (enemy.alive) {
             ctx.fillStyle = enemy.color;
@@ -160,6 +179,7 @@ function drawEnemies() {
 }
 
 function drawUI() {
+    if (!ctx) return;
     ctx.fillStyle = 'white';
     ctx.font = '20px Arial';
     ctx.textAlign = 'left';
@@ -186,6 +206,7 @@ function drawUI() {
 }
 
 function clearCanvas() {
+    if (!ctx) return;
     ctx.fillStyle = '#555';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
@@ -193,7 +214,7 @@ function clearCanvas() {
 // --- 업데이트 함수들 (게임 로직) ---
 
 function updatePlayer() {
-    if (player.health <= 0 && !gameRunning) return; // 게임 오버 상태면 업데이트 안함 (gameRunning으로 이미 제어)
+    if (!ctx || (player.health <= 0 && !gameRunning)) return;
 
     if (keys.ArrowLeft) {
         player.x -= player.speed;
@@ -217,7 +238,7 @@ function updatePlayer() {
         if (player.x < platform.x + platform.width &&
             player.x + player.width > platform.x &&
             player.y + player.height >= platform.y &&
-            player.y + player.height - player.dy <= platform.y + 1 && // 이전 y 위치는 플랫폼 위였고
+            player.y + player.height - player.dy <= platform.y + 1 &&
             player.dy >= 0) {
             player.y = platform.y - player.height;
             player.dy = 0;
@@ -243,7 +264,7 @@ function updatePlayer() {
             player.x = 100;
             player.y = canvas.height - 70;
             player.dy = 0;
-            player.isGrounded = true; // 추락 후에는 땅에 있도록 설정
+            player.isGrounded = true;
             player.isInvincible = true;
             player.lastHitTime = Date.now();
         }
@@ -264,11 +285,11 @@ function updatePlayer() {
 
     if (player.isInvincible && (Date.now() - player.lastHitTime > player.invincibilityDuration)) {
         player.isInvincible = false;
-        // console.log("플레이어 무적 상태 해제");
     }
 }
 
 function updateProjectiles() {
+    if (!ctx) return;
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         p.x += p.dx;
@@ -279,8 +300,7 @@ function updateProjectiles() {
 }
 
 function updateEnemies() {
-    // if (player.health <= 0 && !gameRunning) return; // 게임 오버 시 적 업데이트 중단 (gameRunning으로 제어)
-
+    if (!ctx) return;
     enemies.forEach(enemy => {
         if (enemy.alive && enemy.speed > 0) {
             enemy.x += enemy.speed * enemy.direction;
@@ -294,7 +314,7 @@ function updateEnemies() {
 }
 
 function checkCollisions() {
-    // if (player.health <= 0 && !gameRunning) return; // 게임 오버 시 충돌 감지 중단 (gameRunning으로 제어)
+    if (!ctx || (player.health <= 0 && !gameRunning)) return;
 
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
@@ -330,7 +350,7 @@ function checkCollisions() {
                      player.x = 100;
                      player.y = canvas.height - 70;
                      player.dy = 0;
-                     player.isGrounded = true; // 피격 후 땅에 있도록 설정
+                     player.isGrounded = true;
                 } else {
                     console.log("플레이어 체력 0. 게임 오버.");
                 }
@@ -340,13 +360,17 @@ function checkCollisions() {
 }
 
 function resetGame() {
+    if (!ctx) {
+        console.error("resetGame 호출되었으나 ctx가 없어 실행 불가");
+        return;
+    }
     console.log("게임 리셋 시작");
     player.x = 100;
     player.y = canvas.height - 70;
     player.dx = 0;
     player.dy = 0;
     player.health = player.maxHealth;
-    player.isGrounded = false; // 시작 시 공중에 약간 떠있다가 떨어지도록
+    player.isGrounded = false;
     player.isInvincible = false;
     player.facingDirection = 'right';
     player.lastAttackTime = 0;
@@ -354,14 +378,17 @@ function resetGame() {
 
     projectiles.length = 0;
 
-    enemies.forEach(enemy => {
+    enemies.forEach(enemy => { // 적 정보 초기화
         enemy.alive = true;
         enemy.x = enemy.originalX;
+        // y 위치도 플랫폼 기준으로 재설정
+        const platformIndex = enemies.indexOf(enemy); // 임시로 인덱스 사용, 더 좋은 방법은 적 객체에 플랫폼 정보 저장
+        if (platformIndex === 0 && platforms[1]) enemy.y = platforms[1].y - enemy.height;
+        else if (platformIndex === 1 && platforms[2]) enemy.y = platforms[2].y - enemy.height;
+        else if (platformIndex === 2 && platforms[0]) enemy.y = platforms[0].y - enemy.height;
+
     });
-    // 적 y 위치 재설정
-    enemies[0].y = platforms[1].y - enemies[0].height;
-    enemies[1].y = platforms[2].y - enemies[1].height;
-    enemies[2].y = platforms[0].y - enemies[2].height;
+
 
     score = 0;
     gameRunning = true;
@@ -370,6 +397,10 @@ function resetGame() {
 
 let gameRunning = true;
 function gameLoop() {
+    if (!ctx) { // ctx가 없으면 게임 루프를 실행할 수 없음
+        console.warn("gameLoop 호출되었으나 ctx가 없어 중단합니다.");
+        return;
+    }
     clearCanvas();
 
     if (gameRunning) {
@@ -379,17 +410,16 @@ function gameLoop() {
         checkCollisions();
 
         if (player.health <= 0) {
-            gameRunning = false; // 게임 로직 업데이트 중단
+            gameRunning = false;
             console.log("게임 루프 내에서 게임 오버 감지. gameRunning:", gameRunning);
         }
     }
 
-    // 그리기 함수들은 게임 실행 여부와 관계없이 호출 (게임오버 화면 등)
     drawPlatforms();
     drawEnemies();
     drawProjectiles();
-    drawPlayer(); // 플레이어는 항상 그림 (게임 오버 시에도 마지막 모습)
-    drawUI();     // UI도 항상 그림 (점수, 체력, 게임오버 메시지)
+    drawPlayer();
+    drawUI();
 
     requestAnimationFrame(gameLoop);
 }
@@ -414,15 +444,44 @@ function handleKeyUp(e) {
 }
 
 document.addEventListener('keydown', handleKeyDown);
-document.addEventListener('keyup', keyUp); // 오타 수정: keyUp -> handleKeyUp
+document.addEventListener('keyup', handleKeyUp); // 이전 코드의 오타 수정됨
+
+// --- 게임 시작 전 초기화 ---
+function initializeGameElements() {
+    if (!ctx) {
+        console.error("게임 요소 초기화 실패: ctx가 없습니다.");
+        return;
+    }
+    // 적 y 위치 초기화 (platforms 배열이 정의된 후에)
+    // enemies 배열을 여기서 다시 정의하거나, y 값만 업데이트
+    enemies.length = 0; // 기존 적 배열 비우기
+    enemies.push(
+        { x: 200, y: platforms[1].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 0.7, direction: 1, originalX: 200, patrolRange: 60 },
+        { x: 450, y: platforms[2].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 0, direction: 1, originalX: 450, patrolRange: 0 },
+        { x: 650, y: platforms[0].y - 30, width: 30, height: 30, color: '#C0392B', alive: true, speed: 1, direction: -1, originalX: 650, patrolRange: 80 }
+    );
+    console.log("적 y 위치 및 배열 초기화 완료. 첫 번째 적 y:", enemies[0] ? enemies[0].y : "없음");
+}
+
 
 // --- 게임 시작 ---
-// 적 y 위치 초기화 (platforms 배열이 정의된 후에)
-enemies[0].y = platforms[1].y - enemies[0].height;
-enemies[1].y = platforms[2].y - enemies[1].height;
-enemies[2].y = platforms[0].y - enemies[2].height;
-console.log("초기 적 y 위치 설정 완료");
+if (ctx) { // ctx가 성공적으로 로드되었을 때만 게임 시작
+    initializeGameElements();
+    console.log("게임 루프 시작 직전");
+    gameLoop();
+    console.log("첫 게임 루프 호출됨");
+} else {
+    console.error("ctx가 유효하지 않아 게임을 시작할 수 없습니다.");
+}
+```
 
-console.log("게임 루프 시작 직전");
-gameLoop();
-console.log("첫 게임 루프 호출됨");
+**주요 변경 사항:**
+
+1.  **스크립트 최상단 로그 추가**: `console.log("game.js 스크립트 시작됨");`
+2.  **`canvas` 및 `ctx` 로드 확인**: `canvas` 요소를 가져오고 `2D 컨텍스트`를 얻는 부분에 `null` 체크 및 오류/성공 로그를 추가했습니다.
+3.  **`ctx` 유효성 검사**: `canvas.width`, `canvas.height` 설정 및 모든 그리기 함수, 게임 로직 함수들 내부에서 `ctx`가 유효한지 먼저 확인하도록 하여, `ctx`가 `null`일 때 발생하는 추가적인 오류를 방지하려고 시도했습니다.
+4.  **객체 초기화 시 `ctx` 의존성 처리**: `player` 및 `platforms` 객체 초기화 시 `canvas.width`나 `canvas.height`를 사용하는 부분에서 `ctx` (즉, `canvas`)가 없을 경우를 대비한 기본값을 임시로 넣어두었습니다. (이는 근본적인 해결책은 아니며, `ctx`가 왜 `null`인지 파악하는 것이 중요합니다.)
+5.  **적(enemies) 배열 초기화 시점 변경**: `enemies` 배열의 각 적 y좌표는 `platforms` 배열의 y좌표를 참조하므로, `platforms`가 완전히 정의된 이후에 `enemies`의 y좌표를 설정하도록 `initializeGameElements` 함수를 만들어 게임 시작 전에 호출하도록 변경했습니다.
+6.  **게임 시작 조건**: `ctx`가 성공적으로 로드되었을 때만 `initializeGameElements()`와 `gameLoop()`를 호출하도록 변경했습니다.
+
+**다시 한번, 브라우저 개발자 도구의 콘솔 창을 열고 어떤 메시지가 출력되는지 확인해 주세요.** 이 정보가 문제 해결의 핵심입
