@@ -1,57 +1,3 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>플랫포머 어드벤처</title>
-    <style>
-        body {
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #333; /* 어두운 배경색 */
-            color: white;
-            font-family: 'Arial', sans-serif;
-        }
-        #gameContainer {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        canvas {
-            border: 2px solid #fff; /* 캔버스 테두리 */
-            background-color: #555; /* 캔버스 배경색 */
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-        }
-        #controlsInfo {
-            margin-top: 15px;
-            font-size: 0.9em;
-            text-align: center;
-        }
-        #controlsInfo p {
-            margin: 5px 0;
-        }
-    </style>
-</head>
-<body>
-    <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
-        <div id="controlsInfo">
-            <p><strong>조작법:</strong></p>
-            <p>이동: ← → (화살표 키)</p>
-            <p>점프: 스페이스바</p>
-            <p>공격: 'A' 키</p>
-            <p>재시작 (게임 오버 시): 'R' 키</p>
-        </div>
-    </div>
-    <script src="game.js"></script>
-</body>
-</html>
-```javascript
-// game.js
-
 console.log("game.js 스크립트 시작됨"); // 스크립트 파일 실행 여부 확인용 최상단 로그
 
 const canvas = document.getElementById('gameCanvas');
@@ -473,15 +419,3 @@ if (ctx) { // ctx가 성공적으로 로드되었을 때만 게임 시작
 } else {
     console.error("ctx가 유효하지 않아 게임을 시작할 수 없습니다.");
 }
-```
-
-**주요 변경 사항:**
-
-1.  **스크립트 최상단 로그 추가**: `console.log("game.js 스크립트 시작됨");`
-2.  **`canvas` 및 `ctx` 로드 확인**: `canvas` 요소를 가져오고 `2D 컨텍스트`를 얻는 부분에 `null` 체크 및 오류/성공 로그를 추가했습니다.
-3.  **`ctx` 유효성 검사**: `canvas.width`, `canvas.height` 설정 및 모든 그리기 함수, 게임 로직 함수들 내부에서 `ctx`가 유효한지 먼저 확인하도록 하여, `ctx`가 `null`일 때 발생하는 추가적인 오류를 방지하려고 시도했습니다.
-4.  **객체 초기화 시 `ctx` 의존성 처리**: `player` 및 `platforms` 객체 초기화 시 `canvas.width`나 `canvas.height`를 사용하는 부분에서 `ctx` (즉, `canvas`)가 없을 경우를 대비한 기본값을 임시로 넣어두었습니다. (이는 근본적인 해결책은 아니며, `ctx`가 왜 `null`인지 파악하는 것이 중요합니다.)
-5.  **적(enemies) 배열 초기화 시점 변경**: `enemies` 배열의 각 적 y좌표는 `platforms` 배열의 y좌표를 참조하므로, `platforms`가 완전히 정의된 이후에 `enemies`의 y좌표를 설정하도록 `initializeGameElements` 함수를 만들어 게임 시작 전에 호출하도록 변경했습니다.
-6.  **게임 시작 조건**: `ctx`가 성공적으로 로드되었을 때만 `initializeGameElements()`와 `gameLoop()`를 호출하도록 변경했습니다.
-
-**다시 한번, 브라우저 개발자 도구의 콘솔 창을 열고 어떤 메시지가 출력되는지 확인해 주세요.** 이 정보가 문제 해결의 핵심입
