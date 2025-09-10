@@ -227,6 +227,18 @@ if st.button("🚀 분석 시작하기!", use_container_width=True):
             diff = new_item_total_percent - equipped_total_percent
         
         st.success("분석 완료!")
+        st.markdown("---")
+        st.subheader("🕵️‍♂️ OCR 원본 텍스트 (Raw Text)")
+        st.write("Tesseract가 이미지에서 실제로 읽어낸 글자입니다. 이 내용이 비어있거나 깨져있다면 OCR 자체의 문제입니다.")
+
+        text_col1, text_col2 = st.columns(2)
+        with text_col1:
+            st.text_area("현재 장비 Raw Text", equipped_text, height=300, key="raw_equipped")
+        with text_col2:
+            st.text_area("새로운 장비 Raw Text", new_item_text, height=300, key="raw_new")
+        
+        st.markdown("---")
+
         st.subheader("📊 분석 결과")
         
         res_col1, res_col2, res_col3 = st.columns(3)
@@ -236,10 +248,17 @@ if st.button("🚀 분석 시작하기!", use_container_width=True):
         
         st.markdown("---")
         st.subheader("🔍 상세 스탯 파싱 결과 (디버깅용)")
-        st.write("### 현재 장비 스탯")
-        st.json(equipped_stats)
-        st.write("### 새로운 장비 스탯")
-        st.json(new_item_stats)
+        st.write("OCR 원본 텍스트를 바탕으로 스탯을 추출한 결과입니다. 모두 0이라면 Raw Text에 유효한 스탯 정보가 없다는 뜻입니다.")
+
+        # 상세 결과는 Expander 안에 넣어 깔끔하게 관리
+        with st.expander("상세 결과 보기"):
+            json_col1, json_col2 = st.columns(2)
+            with json_col1:
+                st.write("##### 현재 장비 스탯")
+                st.json(equipped_stats)
+            with json_col2:
+                st.write("##### 새로운 장비 스탯")
+                st.json(new_item_stats)
 
 
     else:
