@@ -1,254 +1,176 @@
 import streamlit as st
 import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image
 import re
 import io
 import numpy as np
-import cv2 # OpenCV for image processing
+import cv2
 
-# --------------------------------------------------------------------------
-# Tesseract 경로 설정 (로컬 개발 환경에서만 필요, Streamlit Cloud에서는 무시됨)
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-# --------------------------------------------------------------------------
-
-# --------------------------------------------------------------------------
-# Streamlit 웹페이지 기본 설정
-# --------------------------------------------------------------------------
+# --- Streamlit 웹페이지 기본 설정 ---
 st.set_page_config(page_title="메이플 장비 비교기", page_icon="🍁", layout="wide")
 st.title("🍁 메이플스토리 장비 스탯 비교기")
 st.write("현재 장비와 새로운 장비의 스크린샷을 업로드하거나 붙여넣기하여 주스탯% 효율을 비교하세요.")
 
-# --------------------------------------------------------------------------
-# [중요] 사용자 설정 영역: 사이드바에서 효율 설정
-# --------------------------------------------------------------------------
+# --- 사용자 설정 사이드바 ---
 st.sidebar.header("⚙️ 스탯 효율 설정 (주스탯% 기준)")
-st.sidebar.write("자신의 스펙 계산기 결과에 맞게 수정하세요.")
-
-# 캐릭터의 주스탯을 선택
 main_stat_options = ['INT', 'STR', 'DEX', 'LUK']
 MAIN_STAT = st.sidebar.selectbox("내 캐릭터의 주스탯", main_stat_options, index=0)
 
-# 효율표를 딕셔너리로 묶어서 관리
-# 이 기본값은 예시이며, 사용자 정의 값으로 덮어씌워집니다.
-default_efficiencies = {
-    '주스탯': 0.097,
-    '부스탯': 0.009,
-    '주스탯%': 1.0,
-    '부스탯%': 0.119,
-    '마력': 0.267,
-    '공격력': 0.267, # 마법사가 아닌 직업군을 위해 공격력도 추가
-    '마력%': 4.63,
-    '올스탯%': 1.12,
-    '크리티컬 데미지%': 3.98,
-    '데미지%': 1.0,
-}
-
-# 사이드바에 숫자 입력 필드 생성
+default_efficiencies = {'주스탯': 0.097, '주스탯%': 1.0, '올스탯%': 1.12, '공격력/마력': 0.267, '데미지%': 1.0, '크리티컬 데미지%': 3.98}
 efficiencies_input = {}
 with st.sidebar.expander("세부 효율 조정하기", expanded=True):
     efficiencies_input['주스탯'] = st.number_input(f"{MAIN_STAT} 1당", value=default_efficiencies['주스탯'], format="%.3f")
-    # 주스탯 %는 주스탯%_ 키로 사용될 것이므로, 여기서는 {MAIN_STAT}_% 로 명시
     efficiencies_input[f'{MAIN_STAT}%'] = st.number_input(f"{MAIN_STAT}% 1%당", value=default_efficiencies['주스탯%'], format="%.2f")
     efficiencies_input['올스탯%'] = st.number_input("올스탯% 1%당", value=default_efficiencies['올스탯%'], format="%.2f")
-    efficiencies_input['공격력_마력'] = st.number_input("공격력/마력 1당", value=default_efficiencies['마력'], format="%.3f") # 통일된 입력 필드
+    efficiencies_input['공격력_마력'] = st.number_input("공격력/마력 1당", value=default_efficiencies['공격력/마력'], format="%.3f")
     efficiencies_input['데미지%'] = st.number_input("데미지% 1%당", value=default_efficiencies['데미지%'], format="%.2f")
     efficiencies_input['크리티컬 데미지%'] = st.number_input("크리티컬 데미지% 1%당", value=default_efficiencies['크리티컬 데미지%'], format="%.2f")
 
-# 입력받은 값으로 최종 stat_efficiencies 딕셔너리 생성
 stat_efficiencies = {
-    # 주스탯 및 주스탯% 설정
-    MAIN_STAT: efficiencies_input['주스탯'],
-    f'{MAIN_STAT}_%': efficiencies_input[f'{MAIN_STAT}%'],
-    
-    # 올스탯 %
-    '올스탯_%': efficiencies_input['올스탯%'],
-    
-    # 공격력/마력 (같은 효율을 사용하도록)
-    '공격력': efficiencies_input['공격력_마력'],
-    '마력': efficiencies_input['공격력_마력'],
-    
-    # 데미지/크뎀 %
-    '데미지_%': efficiencies_input['데미지%'],
-    '크리티컬 데미지_%': efficiencies_input['크리티컬 데미지%'],
-    
-    # 계산에서 제외할 스탯 (0으로 설정)
-    'STR': 0, 'DEX': 0, 'INT': 0, 'LUK': 0, 'HP': 0, 'MP': 0,
-    'STR_%':0, 'DEX_%':0, 'INT_%':0, 'LUK_%':0, '마력_%':0, # 마력%는 잠재에 잘 안 나와서 일단 0, 필요시 추가
-    '방어율 무시_%': 0, '보스데미지_%': 0, 
+    MAIN_STAT: efficiencies_input['주스탯'], f'{MAIN_STAT}_%': efficiencies_input[f'{MAIN_STAT}%'],
+    '올스탯_%': efficiencies_input['올스탯%'], '공격력': efficiencies_input['공격력_마력'], '마력': efficiencies_input['공격력_마력'],
+    '데미지_%': efficiencies_input['데미지%'], '크리티컬 데미지_%': efficiencies_input['크리티컬 데미지%'],
 }
-# 부스탯의 INT, LUK, STR, DEX는 MAIN_STAT에 따라 효율이 달라질 수 있음.
-# 현재 MAIN_STAT에 따라 주스탯은 MAIN_STAT으로, 나머지는 0으로 설정
-for stat in main_stat_options:
-    if stat != MAIN_STAT:
-        stat_efficiencies[stat] = 0
-        stat_efficiencies[f'{stat}_%'] = 0
 
-# Streamlit Cloud에서 pytesseract가 tesseract 경로를 찾도록 환경 변수 설정
-# GitHub 레포지토리에 .streamlit/config.toml 파일을 만들고 
-# [general]
-#  tesseract_cmd = "/usr/bin/tesseract"
-# 추가하는 것이 더 안정적일 수 있습니다.
-# st.experimental_singleton(lambda: pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract")()
+# --- 이미지 처리 및 OCR 함수 ---
 
-
-# --------------------------------------------------------------------------
-# OCR 인식률 강화를 위한 이미지 전처리 함수 추가 (OpenCV 사용)
-# --------------------------------------------------------------------------
 def preprocess_image_for_ocr(image):
     """
-    OCR 인식을 위해 이미지를 전처리하는 함수.
-    단순하고 효과적인 흑백 변환(Otsu's Binarization)을 사용합니다.
+    [최종 개선] 이미지 확대 + 흑백 변환으로 OCR 인식률 극대화
     """
-    # PIL 이미지를 OpenCV에서 처리 가능한 numpy 배열로 변환하고, 그레이스케일로 변경
-    img_np = np.array(image.convert('L')) 
+    img_np = np.array(image.convert('L'))
     
-    # Otsu의 이진화 알고리즘을 사용하여 이미지를 흑/백으로만 구성되도록 변환
-    # 글자는 흰색(255), 배경은 검은색(0)이 됩니다.
-    # 이 방법은 배경과 글자의 색상 차이를 기반으로 최적의 기준값을 자동으로 찾아줍니다.
-    _, thresh = cv2.threshold(img_np, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # 1. 이미지 크기를 2배로 확대 (Upscaling)
+    h, w = img_np.shape
+    upscaled = cv2.resize(img_np, (w*2, h*2), interpolation=cv2.INTER_LINEAR)
     
-    # 처리된 numpy 배열을 다시 PIL 이미지로 변환하여 반환
+    # 2. Otsu 이진화 적용
+    _, thresh = cv2.threshold(upscaled, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    
     return Image.fromarray(thresh)
 
-
-# --------------------------------------------------------------------------
-# 기존 분석 로직 (함수 부분)
-# --------------------------------------------------------------------------
-# 캐시를 사용하지 않음 (전처리 및 Tesseract 설정 변경으로 인해, 필요시 다시 추가)
-# @st.cache_data
 def extract_text_from_image(image_bytes, image_key):
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert('RGB') # OpenCV 호환을 위해 RGB 변환
-        
-        # 이미지 전처리 적용
+        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         processed_image = preprocess_image_for_ocr(image)
-        
-        # 디버깅용: 전처리된 이미지 표시 (선택 사항)
-        # st.sidebar.image(processed_image, caption=f"{image_key} 전처리 이미지", width=100)
-
-        # Tesseract OCR 설정 (PSM, OEM)
-        # --psm 4: 단일 텍스트 블록으로 가정하고 텍스트 인식 (아이템 툴팁처럼)
-        # --oem 3: LSTM 기반 최신 엔진 사용 (가장 정확)
-        custom_config = r'--psm 6 --oem 3' # psm 6: 단일 균일한 텍스트 블록으로 가정
+        custom_config = r'--oem 3 --psm 6'
         text = pytesseract.image_to_string(processed_image, lang='kor', config=custom_config)
         return text
     except Exception as e:
-        st.error(f"이미지 '{image_key}' 처리 중 오류 발생: {e}")
+        st.error(f"'{image_key}' 처리 중 오류: {e}")
         return ""
 
 def parse_stats(text):
+    """
+    [최종 개선] 유연한 스탯 파서
+    - 한 줄씩 읽으면서 키워드와 숫자를 찾아내는 방식으로 변경
+    """
     stats = {
-        'STR': 0, 'DEX': 0, 'INT': 0, 'LUK': 0, 'HP': 0, 'MP': 0, 
-        '공격력': 0, '마력': 0, '올스탯_%': 0, 'STR_%': 0, 'DEX_%': 0, 
-        'INT_%': 0, 'LUK_%': 0, '마력_%': 0, '데미지_%': 0, 
-        '보스데미지_%': 0, '크리티컬 데미지_%': 0, '방어율 무시_%': 0
+        'STR': 0, 'DEX': 0, 'INT': 0, 'LUK': 0, 'HP': 0, 'MP': 0, '공격력': 0, '마력': 0,
+        '올스탯_%': 0, 'STR_%': 0, 'DEX_%': 0, 'INT_%': 0, 'LUK_%': 0, '마력_%': 0,
+        '데미지_%': 0, '보스데미지_%': 0, '크리티컬 데미지_%': 0, '방어율 무시_%': 0
     }
+    
     lines = text.split('\n')
     for line in lines:
-        line = line.replace(' ', '')
-        
-        # 기본 스탯 (괄호 안의 숫자 포함)
-        match_base = re.search(r'^(STR|DEX|INT|LUK|공격력|마력)\s*:\s*\+(\d+)(\s*\(\+(\d+)\))?', line)
-        if match_base:
-            stat_name = match_base.group(1)
-            base_value = int(match_base.group(2))
-            extra_value = int(match_base.group(4)) if match_base.group(4) else 0
-            stats[stat_name] += base_value + extra_value
-            continue # 이 줄에서 처리했으면 다음 라인으로
+        # 퍼센트(%) 스탯 먼저 확인 (더 구체적인 조건이므로)
+        if '%' in line:
+            # 올스탯% 또는 주스탯%
+            if any(keyword in line for keyword in ["올스", "스탯", "스탠"]):
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['올스탯_%'] += sum(int(n) for n in numbers)
+            if 'INT' in line:
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['INT_%'] += sum(int(n) for n in numbers)
+            if 'DEX' in line:
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['DEX_%'] += sum(int(n) for n in numbers)
+            if 'STR' in line:
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['STR_%'] += sum(int(n) for n in numbers)
+            if 'LUK' in line:
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['LUK_%'] += sum(int(n) for n in numbers)
+            # 기타 % 스탯
+            if any(keyword in line for keyword in ["마력", "마련"]):
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['마력_%'] += sum(int(n) for n in numbers)
+            if any(keyword in line for keyword in ["데미지", "머지"]):
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['데미지_%'] += sum(int(n) for n in numbers)
+            if any(keyword in line for keyword in ["크리티컬", "크리"]):
+                numbers = re.findall(r'(\d+)\s*%', line)
+                if numbers: stats['크리티컬 데미지_%'] += sum(int(n) for n in numbers)
+
+        # 일반 스탯 (숫자만 있는 경우)
+        else:
+            numbers = [int(n) for n in re.findall(r'\d+', line)]
+            if not numbers: continue
             
-        # 퍼센트 스탯 (잠재/에디)
-        match_percent = re.search(r'^(올스탯|STR|DEX|INT|LUK|마력|데미지|크리티컬데미지|보스몬스터공격시데미지|몬스터방어율무시)\s*:\s*\+(\d+)%', line)
-        if match_percent:
-            stat_name, value = match_percent.group(1), int(match_percent.group(2))
-            key_map = {'올스탯': '올스탯_%', 'STR': 'STR_%', 'DEX': 'DEX_%', 'INT': 'INT_%', 'LUK': 'LUK_%', '마력': '마력_%', '데미지': '데미지_%', '크리티컬데미지': '크리티컬 데미지_%', '보스몬스터공격시데미지': '보스데미지_%', '몬스터방어율무시': '방어율 무시_%'}
-            if stat_name in key_map: stats[key_map[stat_name]] += value
-            continue # 이 줄에서 처리했으면 다음 라인으로
+            # 괄호 안의 숫자까지 모두 더함
+            total_value = sum(numbers)
+
+            if 'INT' in line: stats['INT'] += total_value
+            elif 'DEX' in line: stats['DEX'] += total_value
+            elif 'STR' in line: stats['STR'] += total_value
+            elif 'LUK' in line: stats['LUK'] += total_value
+            elif any(keyword in line for keyword in ["공격력", "공격"]): stats['공격력'] += total_value
+            elif any(keyword in line for keyword in ["마력", "마련"]): stats['마력'] += total_value
+            elif '최대 HP' in line or '대배' in line: stats['HP'] += total_value
+            elif '최대 MP' in line: stats['MP'] += total_value
             
     return stats
-
 
 def calculate_equivalent_main_stat_percent(stats):
     total_percent = 0
     for stat_name, stat_value in stats.items():
         efficiency = stat_efficiencies.get(stat_name, 0)
-        total_percent += stat_value * efficiency
+        if efficiency > 0:
+            total_percent += stat_value * efficiency
     return total_percent
 
-# --------------------------------------------------------------------------
-# 웹사이트 레이아웃 구성
-# --------------------------------------------------------------------------
+# --- 웹사이트 레이아웃 ---
 col1, col2 = st.columns(2)
-
 with col1:
     st.subheader("📸 현재 착용 장비")
     equipped_image_file = st.file_uploader("클릭 또는 이미지 붙여넣기 (Ctrl+V)", key="equipped", type=['png', 'jpg', 'jpeg'])
-    if equipped_image_file:
-        st.image(equipped_image_file, caption="업로드된 현재 장비", use_container_width=True)
-
+    if equipped_image_file: st.image(equipped_image_file, caption="업로드된 현재 장비", use_container_width=True)
 with col2:
     st.subheader("✨ 새로운 장비")
-    new_item_image_file = st.file_uploader("클릭 또는 이미지 붙여넣기 (Ctrl+V)", key="new", type=['png', 'jpg', 'jpeg'])
-    if new_item_image_file:
-        st.image(new_item_image_file, caption="업로드된 새로운 장비", use_container_width=True)
+    new_item_file = st.file_uploader("클릭 또는 이미지 붙여넣기 (Ctrl+V)", key="new", type=['png', 'jpg', 'jpeg'])
+    if new_item_file: st.image(new_item_file, caption="업로드된 새로운 장비", use_container_width=True)
 
 st.divider()
 
 if st.button("🚀 분석 시작하기!", use_container_width=True):
-    if equipped_image_file and new_item_image_file:
-        with st.spinner('장비 옵션을 읽는 중... (시간이 다소 소요될 수 있습니다)'):
+    if equipped_image_file and new_item_file:
+        with st.spinner('장비 옵션을 읽는 중... (최종 분석)'):
             equipped_bytes = equipped_image_file.getvalue()
-            new_item_bytes = new_item_image_file.getvalue()
-
+            new_item_bytes = new_item_file.getvalue()
             equipped_text = extract_text_from_image(equipped_bytes, "현재 장비")
             new_item_text = extract_text_from_image(new_item_bytes, "새로운 장비")
-            
-            # 디버깅용: 추출된 텍스트 확인
-            # st.text("--- 현재 장비 추출 텍스트 ---")
-            # st.text(equipped_text)
-            # st.text("--- 새 장비 추출 텍스트 ---")
-            # st.text(new_item_text)
-
             equipped_stats = parse_stats(equipped_text)
             new_item_stats = parse_stats(new_item_text)
-
-            equipped_total_percent = calculate_equivalent_main_stat_percent(equipped_stats)
-            new_item_total_percent = calculate_equivalent_main_stat_percent(new_item_stats)
-            diff = new_item_total_percent - equipped_total_percent
+            equipped_total = calculate_equivalent_main_stat_percent(equipped_stats)
+            new_item_total = calculate_equivalent_main_stat_percent(new_item_stats)
+            diff = new_item_total - equipped_total
         
         st.success("분석 완료!")
-        st.markdown("---")
-        st.subheader("🕵️‍♂️ OCR 원본 텍스트 (Raw Text)")
-        st.write("Tesseract가 이미지에서 실제로 읽어낸 글자입니다. 이 내용이 비어있거나 깨져있다면 OCR 자체의 문제입니다.")
-
-        text_col1, text_col2 = st.columns(2)
-        with text_col1:
-            st.text_area("현재 장비 Raw Text", equipped_text, height=300, key="raw_equipped")
-        with text_col2:
-            st.text_area("새로운 장비 Raw Text", new_item_text, height=300, key="raw_new")
-        
-        st.markdown("---")
-
         st.subheader("📊 분석 결과")
-        
         res_col1, res_col2, res_col3 = st.columns(3)
-        res_col1.metric("현재 장비 등급", f"{equipped_total_percent:.2f}%")
-        res_col2.metric("새 장비 등급", f"{new_item_total_percent:.2f}%")
+        res_col1.metric("현재 장비 등급", f"{equipped_total:.2f}%")
+        res_col2.metric("새 장비 등급", f"{new_item_total:.2f}%")
         res_col3.metric("효율 증감", f"{diff:+.2f}%", delta=f"{diff:+.2f}%")
-        
-        st.markdown("---")
-        st.subheader("🔍 상세 스탯 파싱 결과 (디버깅용)")
-        st.write("OCR 원본 텍스트를 바탕으로 스탯을 추출한 결과입니다. 모두 0이라면 Raw Text에 유효한 스탯 정보가 없다는 뜻입니다.")
 
-        # 상세 결과는 Expander 안에 넣어 깔끔하게 관리
-        with st.expander("상세 결과 보기"):
+        # 디버깅 섹션
+        with st.expander("자세한 분석 내용 보기 (디버깅용)"):
+            st.subheader("🕵️‍♂️ OCR 원본 텍스트 (Raw Text)")
+            text_col1, text_col2 = st.columns(2)
+            with text_col1: st.text_area("현재 장비", equipped_text, height=300)
+            with text_col2: st.text_area("새 장비", new_item_text, height=300)
+            st.subheader("🔍 상세 스탯 파싱 결과")
             json_col1, json_col2 = st.columns(2)
-            with json_col1:
-                st.write("##### 현재 장비 스탯")
-                st.json(equipped_stats)
-            with json_col2:
-                st.write("##### 새로운 장비 스탯")
-                st.json(new_item_stats)
-
-
+            with json_col1: st.json(equipped_stats)
+            with json_col2: st.json(new_item_stats)
     else:
         st.warning("두 장비의 이미지를 모두 업로드해주세요.")
