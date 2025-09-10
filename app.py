@@ -95,30 +95,19 @@ for stat in main_stat_options:
 # OCR 인식률 강화를 위한 이미지 전처리 함수 추가 (OpenCV 사용)
 # --------------------------------------------------------------------------
 def preprocess_image_for_ocr(image):
-    # PIL Image를 OpenCV 이미지(numpy array)로 변환
-    img_np = np.array(image)
+    """
+    OCR 인식을 위해 이미지를 전처리하는 함수.
+    단순하고 효과적인 흑백 변환(Otsu's Binarization)을 사용합니다.
+    """
+    # PIL 이미지를 OpenCV에서 처리 가능한 numpy 배열로 변환하고, 그레이스케일로 변경
+    img_np = np.array(image.convert('L')) 
     
-    # 그레이스케일 변환
-    gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+    # Otsu의 이진화 알고리즘을 사용하여 이미지를 흑/백으로만 구성되도록 변환
+    # 글자는 흰색(255), 배경은 검은색(0)이 됩니다.
+    # 이 방법은 배경과 글자의 색상 차이를 기반으로 최적의 기준값을 자동으로 찾아줍니다.
+    _, thresh = cv2.threshold(img_np, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
-    # 대비 강조 (CLAHE - Contrast Limited Adaptive Histogram Equalization)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(gray)
-
-    # 노이즈 제거 (가우시안 블러)
-    denoised = cv2.GaussianBlur(enhanced, (1, 1), 0) # 1,1 커널로 최소한의 블러
-
-    # 이진화 (Adaptive Thresholding)
-    # 글자 크기가 가변적이므로, 전역 이진화보다 적응형 이진화가 유리
-    thresh = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                   cv2.THRESH_BINARY_INV, 11, 2) # THRESH_BINARY_INV로 글자를 흰색으로 만듦
-
-    # 글자 확대를 위한 Dilation (선택 사항, 글자가 너무 얇을 때)
-    # kernel = np.ones((1,1), np.uint8)
-    # dilated = cv2.dilate(thresh, kernel, iterations=1)
-    # return Image.fromarray(dilated)
-
-    # 다시 PIL Image로 변환하여 반환
+    # 처리된 numpy 배열을 다시 PIL 이미지로 변환하여 반환
     return Image.fromarray(thresh)
 
 
