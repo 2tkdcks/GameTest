@@ -194,13 +194,13 @@ with col1:
     st.subheader("📸 현재 착용 장비")
     equipped_image_file = st.file_uploader("클릭 또는 이미지 붙여넣기 (Ctrl+V)", key="equipped", type=['png', 'jpg', 'jpeg'])
     if equipped_image_file:
-        st.image(equipped_image_file, caption="업로드된 현재 장비", use_column_width=True)
+        st.image(equipped_image_file, caption="업로드된 현재 장비", use_container_width=True)
 
 with col2:
     st.subheader("✨ 새로운 장비")
     new_item_image_file = st.file_uploader("클릭 또는 이미지 붙여넣기 (Ctrl+V)", key="new", type=['png', 'jpg', 'jpeg'])
     if new_item_image_file:
-        st.image(new_item_image_file, caption="업로드된 새로운 장비", use_column_width=True)
+        st.image(new_item_image_file, caption="업로드된 새로운 장비", use_container_width=True)
 
 st.divider()
 
